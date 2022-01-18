@@ -1,0 +1,12 @@
+package rdsom
+
+import "time"
+
+const prefix{{ toPascalCase $.SchemaName }} = "rdsom:{{ $.ProjName }}:{{ $.SchemaName }}:"
+const idx{{ toPascalCase $.SchemaName }} = "rdsom:{{ $.ProjName }}:idx:Bar:{{ $.Timestamp }}"
+
+type {{ $.SchemaName }} struct {
+  {{ range $_, $field := $.Fields }}
+  {{ $field.Name }} {{ $field.GoType }} `json:"{{ toCamelCase $field.Name }},omitempty"`
+  {{- end }}
+}

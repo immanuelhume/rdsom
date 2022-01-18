@@ -1,0 +1,80 @@
+package rdsom
+
+import (
+	"context"
+  "encoding/json"
+	"fmt"
+  "strings"
+  "time"
+
+	"github.com/go-redis/redis/v8"
+  "{{ $.RdsomPkgPath }}/predicate"
+	uuid "github.com/lithammer/shortuuid/v4"
+)
+
+{{ $create := $.SchemaName | printf "%sCreate" }}
+
+type {{ $create }} struct {
+    rdb *redis.Client
+    values map[string]interface{}
+    errors []error
+    emptyFields []string
+}
+
+func New{{ $create }}(rdb *redis.Client) *{{ $create }} {
+  return &{{ $create }}{rdb: rdb, values: make(map[string]interface{}, {{ len $.Fields }}), emptyFields: make([]string, 0, 1)}
+}
+
+{{ range $_, $field := $.Fields }}
+{{ $argName := toCamelCase $field.Name }}
+
+func (c *{{ $create }}) Set{{ $field.Name }}({{ $argName }} {{ $field.GoType }}) *{{ $create }} {
+  {{ if eq $field.GoType "[]int" "[]float64" "[]string" -}}
+	if {{ $argName }} == nil {
+		{{ $argName }} = {{ $field.GoType }}{}
+	}
+	xs, err := json.Marshal({{ $argName }})
+	if err != nil {
+		c.errors = append(c.errors, err)
+		return c
+	}
+	c.values["{{ $field.JsonName }}"] = predicate.Escape(string(xs))
+  {{- else if eq $field.GoType "time.Time" -}}
+  c.values["{{ $field.JsonName }}"] = {{ $field.JsonName }}.Unix()
+  {{- else if eq $field.GoType "string" -}}
+  if stringField == "" {
+    c.emptyFields = append(c.emptyFields, "{{ $field.JsonName }}")
+  }
+	c.values["{{ $field.JsonName }}"] = predicate.Escape({{ $field.JsonName }})
+  {{- else -}}
+	c.values["{{ $field.JsonName }}"] = {{ $field.JsonName }}
+  {{- end }}
+	return c
+}
+
+{{ end }}
+
+func (c *{{ $create }}) Save(ctx context.Context) (string, error) {
+  if len(c.emptyFields) != 0 {
+		c.values["_empty"] = strings.Join(c.emptyFields, ",")
+	}
+  id := uuid.New()
+  c.values["id"] = id
+  key, err := c.genKey()
+  if err != nil {
+      return "", err
+  }
+  if err := c.rdb.HSet(ctx, key, c.values).Err(); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func (c *{{ $create }}) genKey() (string, error) {
+  id, ok := c.values["id"].(string)
+  if !ok {
+    return "", fmt.Errorf("id not set for %#v", c)
+  }
+  return prefixBar + id, nil
+}
+

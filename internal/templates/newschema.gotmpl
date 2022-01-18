@@ -1,0 +1,12 @@
+{{ $SchemaName := title $.SchemaName }}
+package schema
+
+import "github.com/immanuelhume/rdsom"
+
+type {{ $SchemaName }} struct {
+  rdsom.Schema
+}
+
+func ({{ toInitCase $SchemaName }} *{{ $SchemaName }}) Fields() []rdsom.Field {
+  return []rdsom.Field{}
+}

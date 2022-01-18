@@ -1,0 +1,27 @@
+package main
+
+import (
+  "log"
+
+  "{{ $.SchemaPkgPath }}"
+  "github.com/immanuelhume/rdsom"
+  "github.com/immanuelhume/rdsom/gen"
+)
+
+const _timestamp uint64 = {{ $.Timestamp }}
+
+{{ range $_, $s := $.SchemaNames }}
+var _{{ toLower $s }} = schemas.{{ $s }}{}
+{{- end }}
+var _schemas = []rdsom.ISchema{_foo, _bar}
+
+func main() {
+  metadata := gen.Metadata{
+    Timestamp: {{ $.Timestamp }},
+    ProjName: "{{ $.ProjName }}",
+    RdsomPkgPath: "{{ $.RdsomPkgPath }}",
+  }
+	if err := gen.Gen(_schemas, metadata); err != nil {
+		log.Fatal("running codegen: %s", err)
+	}
+}

@@ -1,0 +1,42 @@
+package rdsom
+
+import "github.com/go-redis/redis/v8"
+
+type Client struct {
+	rdb *redis.Client
+  migrationScript string
+
+  {{ range $_, $schema := $.Schemas }}
+	{{ $schema.Name }} *{{ toCamelCase $schema.Name }}Client
+  {{ end }}
+}
+
+func NewClient(opts *redis.Options) *Client {
+	rdb := redis.NewClient(opts)
+
+	return &Client{
+		rdb: rdb,
+    migrationScript: "lua/migrate.lua",
+    {{ range $_, $schema := $.Schemas -}}
+		{{ $schema.Name }}: &{{ toCamelCase $schema.Name }}Client{rdb},
+    {{ end }}
+	}
+}
+
+func (c *Client) Redis() *redis.Client {
+	return c.rdb
+}
+
+{{ range $_, $schema := $.Schemas }}
+type {{ toCamelCase $schema.Name }}Client struct {
+	rdb *redis.Client
+}
+
+func (c *{{ toCamelCase $schema.Name }}Client) Create() *{{ $schema.Name }}Create {
+	return New{{ $schema.Name }}Create(c.rdb)
+}
+
+func (c *{{ toCamelCase $schema.Name }}Client) Find() *{{ $schema.Name }}Find {
+	return New{{ $schema.Name }}Find(c.rdb)
+}
+{{ end }}
