@@ -1,0 +1,30 @@
+package {{ $.Schema.Name }}
+
+import (
+    "{{ $.RdsomPkgPath }}/predicate"
+)
+
+{{ range $_, $field := $.Schema.Fields }}
+
+func {{ $field.Name }}Eq({{ $field.JsonName }} {{ $field.GoType }}) predicate.Predicate {
+    var p predicate.Predicate
+
+    {{ if eq $field.GoType "bool" }}
+    if {{ $field.JsonName }} {
+        p.Query = "@{{ $field.JsonName }}:[1 1]"
+        return p
+    }
+    p.Query = "@{{ $field.JsonName }}:[0 0]"
+    {{ end }}
+
+    {{ if eq $field.GoType "[]float64" "[]int" "[]string" }}
+    if {{ $field.JsonName }} == nil{
+        p.Query = "@{{ $field.JsonName }}:null"
+        return p
+    }
+    {{ end }}
+
+    return p
+}
+
+{{ end }}

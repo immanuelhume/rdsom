@@ -6,7 +6,6 @@ const prefixBar = "rdsom:rdsomgolden:Bar:"
 const idxBar = "rdsom:rdsomgolden:idx:Bar:1642524233"
 
 type Bar struct {
-	ID           string    `json:"id,omitempty"`
 	BoolField    bool      `json:"boolField,omitempty"`
 	FloatField   float64   `json:"floatField,omitempty"`
 	FloatsField  []float64 `json:"floatsField,omitempty"`

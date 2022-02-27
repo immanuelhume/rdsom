@@ -2,11 +2,10 @@ package gen
 
 import (
 	"github.com/immanuelhume/rdsom"
-	"github.com/immanuelhume/rdsom/internal"
 )
 
 func Gen(ss []rdsom.ISchema, metadata Metadata) error {
-	return internal.StartCodeGen()
+	return nil
 }
 
 type Metadata struct {

@@ -1,24 +1,21 @@
 package rdsom
 
 import (
-	"context"
-  "encoding/json"
-	"fmt"
-  "strings"
-  "time"
-
-	"github.com/go-redis/redis/v8"
-  "{{ $.RdsomPkgPath }}/predicate"
-	uuid "github.com/lithammer/shortuuid/v4"
+    "context"
+    "encoding/json"
+    "fmt"
+    uuid "github.com/lithammer/shortuuid/v4"
+    "strings"
+    "{{ $.RdsomPkgPath }}/predicate"
 )
 
 {{ $create := $.SchemaName | printf "%sCreate" }}
-
-type {{ $create }} struct {
-    rdb *redis.Client
-    values map[string]interface{}
-    errors []error
-    emptyFields []string
+type
+{{ $create }} struct {
+rdb *redis.Client
+values map[string]interface{}
+errors []error
+emptyFields []string
 }
 
 func New{{ $create }}(rdb *redis.Client) *{{ $create }} {
@@ -30,9 +27,6 @@ func New{{ $create }}(rdb *redis.Client) *{{ $create }} {
 
 func (c *{{ $create }}) Set{{ $field.Name }}({{ $argName }} {{ $field.GoType }}) *{{ $create }} {
   {{ if eq $field.GoType "[]int" "[]float64" "[]string" -}}
-	if {{ $argName }} == nil {
-		{{ $argName }} = {{ $field.GoType }}{}
-	}
 	xs, err := json.Marshal({{ $argName }})
 	if err != nil {
 		c.errors = append(c.errors, err)

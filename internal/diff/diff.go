@@ -2,99 +2,148 @@ package diff
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
-	"os/signal"
-
-	"github.com/google/uuid"
 )
 
-// Diff reads from an io.Reader and compares it against the contents of an approved file.
-// If they differ, it creates two temp files and opens them in VS Code.
-func Diff(got io.Reader, approvedFileName string) (ok bool, err error) {
-	r, err := os.Open(approvedFileName)
-	if err != nil {
-		return false, err
-	}
-	defer func() {
-		err = r.Close()
-	}()
-	buf := bytes.NewBuffer(nil)
-	rcv := file{
-		name: fmt.Sprintf("testdata/received-%s.go", uuid.New().String()),
-		val:  io.TeeReader(got, buf),
-	}
-	apv := file{
-		name: approvedFileName,
-		val:  r,
-	}
-
-	res, err := check(rcv, apv)
-	if err != nil {
-		return false, err
-	}
-	if res.ok {
-		return true, nil
-	}
-
-	// Create the temp files.
-	os.WriteFile(rcv.name, buf.Bytes(), 0664)
-	defer os.Remove(rcv.name)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-
-	cmd := exec.Command(res.cmd[0], res.cmd[1:]...)
-	cmd.Start()
-	go func(cmd *exec.Cmd) {
-		<-c
-		os.Remove(rcv.name)
-	}(cmd)
-	cmd.Wait()
-
-	return false, nil
+type diffChecker struct {
+	got    *os.File
+	want   *os.File
+	editor editor
+	errors []error
 }
 
-func check(received, approved file) (result, error) {
-	var (
-		xs  = bufio.NewReader(received.val)
-		ys  = bufio.NewReader(approved.val)
-		res = result{}
-	)
+type viewer interface {
+	// View opens an editor.
+	View() error
+	// Close closes the editor.
+	Close() error
+}
 
-	// Check the contents byte by byte.
+func NewDiff(got io.Reader, approvedF string) *diffChecker {
+	d := &diffChecker{}
+	want, err := os.Open(approvedF)
+	if err != nil {
+		d.errors = append(d.errors, err)
+		return d
+	}
+	gotX, err := ioutil.TempFile("", "received-*.go")
+	if err != nil {
+		d.errors = append(d.errors, fmt.Errorf("diff.NewDiff error creating temp file: %w", err))
+		return d
+	}
+
+	// Copy the received contents to the tmp file.
+	if _, err := io.Copy(gotX, got); err != nil {
+		d.errors = append(d.errors, err)
+		return d
+	}
+
+	// Reset the file pointer.
+	if _, err := gotX.Seek(0, io.SeekStart); err != nil {
+		d.errors = append(d.errors, err)
+		return d
+	}
+	d.got = gotX
+	d.want = want
+	return d
+}
+
+// Do performs the diff check, and closes all open files.
+func (d *diffChecker) Do() (viewer, error) {
+	if len(d.errors) != 0 {
+		return nil, d.errors[0]
+	}
+	// Conduct the actual byte-by-byte check.
+	ok, err := check(d.got, d.want)
+	if err != nil {
+		return nil, err
+	}
+	err = d.got.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = d.want.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		switch d.editor {
+		case VSCode:
+			return newVSCodeViewer(d.got.Name(), d.want.Name()), nil
+		}
+	}
+	return nil, nil
+}
+
+func (d *diffChecker) With(e editor) *diffChecker {
+	d.editor = e
+	return d
+}
+
+type editor int
+
+const (
+	VSCode editor = iota
+)
+
+type vsCodeViewer struct {
+	x   string    // first filename
+	y   string    // second filename
+	cmd *exec.Cmd // command executed to open VSCode
+}
+
+func newVSCodeViewer(x, y string) *vsCodeViewer {
+	// The -w flag tells VSCode not to detach from terminal.
+	args := []string{"-w", "-d", x, y}
+	cmd := exec.Command("code", args...)
+	return &vsCodeViewer{x, y, cmd}
+}
+
+func (v *vsCodeViewer) View() error {
+	err := v.cmd.Start()
+	if err != nil {
+		return err
+	}
+	defer v.Close() // Unhandled error.
+	err = v.cmd.Wait()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *vsCodeViewer) Close() error {
+	return v.cmd.Process.Kill()
+}
+
+// check simply checks if the data from two readers
+// are the same.
+func check(x, y io.Reader) (bool, error) {
+	xs := bufio.NewReader(x)
+	ys := bufio.NewReader(y)
+	// Check the content byte by byte.
 	for {
 		x, errx := xs.ReadByte()
 		y, erry := ys.ReadByte()
 		if errx == io.EOF && erry == io.EOF {
-			res.ok = true
-			return res, nil
+			return true, nil
 		}
 		if errx == io.EOF || erry == io.EOF {
 			break
 		}
 		if errx != nil {
-			return res, errx
+			return false, errx
 		}
 		if erry != nil {
-			return res, erry
+			return false, erry
 		}
 		if x != y {
 			break
 		}
 	}
-	res.cmd = []string{"/usr/bin/code", "-w", "-d", received.name, approved.name}
-	return res, nil
-}
-
-type result struct {
-	ok  bool
-	cmd []string
-}
-
-type file struct {
-	name string
-	val  io.Reader
+	return false, nil
 }

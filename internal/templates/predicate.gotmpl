@@ -29,3 +29,7 @@ func (p Predicate) And(q Predicate) Predicate {
 	return Predicate{Query: fmt.Sprintf("%s %s", p.Query, q.Query)}
 }
 
+func (p *Predicate) EscapeQuery() {
+	p.Query = Escape(p.Query)
+}
+

@@ -9,8 +9,9 @@ import (
 	"github.com/immanuelhume/rdsom/internal/diff"
 )
 
-// TestAllTemplates faciliates a TDD approach to producing
-// templates and their required data.
+// TestAllTemplates is documentation for what data
+// goes into each template. It allows for an simple,
+// iterative approach to building out the template files.
 func TestAllTemplates(t *testing.T) {
 	tests := []struct {
 		tmpl   string      // template name, e.g. "main.gotmpl"
@@ -108,6 +109,17 @@ func TestAllTemplates(t *testing.T) {
 				Schemas:   []internal.Schema{_barSchema},
 			},
 		},
+		{
+			tmpl:   "where.gotmpl",
+			golden: "bar/where.go",
+			data: struct {
+				Schema       internal.Schema
+				RdsomPkgPath string
+			}{
+				Schema:       _barSchema,
+				RdsomPkgPath: "github.com/immanuelhume/rdsomgolden",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,11 +135,15 @@ func TestAllTemplates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ok, err := diff.Diff(buf, golden)
+		v, err := diff.NewDiff(buf, golden).Do()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !ok {
+		if v != nil {
+			err := v.View()
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Errorf("template %q did not match golden %q", tt.tmpl, tt.golden)
 		}
 	}
